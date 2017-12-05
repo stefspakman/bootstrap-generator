@@ -1,6 +1,6 @@
 {
   "name": "bootstrap-generator",
-  "version": "0.1.0",
+  "version": "1.0.0",
   "description": "Generate a Bootstrap JavaScript file. Works with Bootstrap 3 and 4",
   "main": "index.js",
   "scripts": {
