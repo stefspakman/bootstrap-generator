@@ -1,21 +1,18 @@
 var
-  fs = require('fs'),
-  fse = require('fs-extra'),
+  fs = require('fs-extra'),
   chalk = require('chalk'),
+  _ = require('lodash'),
   concat = require('concat'),
   log = require('fancy-log'),
   path = require('path'),
   UglifyJS = require("uglify-es"),
-  zlib = require('zlib');
+  zlib = require('zlib'),
+  fetchUrl = require("fetch").fetchUrl,
+  tmp = require('tmp');
 
 function defaultMode(settings) {
   settings = {
-    version: withDefault(settings.version, '4.0.0-beta'),
-    locations: withDefault(settings.locations, {
-      bootstrap: "./node_modules/bootstrap/js/dist/",
-      popperjs: "./node_modules/popper.js/dist/",
-      tether: "./node_modules/tether/dist/js/"
-    }),
+    location: withDefault(settings.location, "./node_modules/bootstrap/js/dist/"),
     destination: withDefault(settings.destination, './'),
     files: withDefault(settings.files, {
       alert: true,
@@ -32,10 +29,62 @@ function defaultMode(settings) {
     minify: withDefault(settings.minify, true),
     gzip: withDefault(settings.gzip, true)
   }
+  settings['bootstrappath'] = settings.location;
+  if (settings['bootstrappath'].substring(0,2) === './'){
+    settings['bootstrappath'] = (settings['bootstrappath']).replace("./", "");
+  }
 
   var files = getBootstrap(settings);
+
+  if (settings.files.tooltip || settings.files.dropdown) {
+    var file = fs.readFileSync(settings['bootstrappath'] + '/tooltip.js','utf8');
+    if (file.includes('popper')) {
+      var popper = getPopper(settings['bootstrappath']);
+      var getNewFiles = insertTempFile(files, createTempFile(popper));
+      getNewFiles.then(function(files){
+        processFiles(settings, files);
+      });
+    } else if (file.includes('tether')) {
+      var tether = getTether(settings['bootstrappath']);
+      var getNewFiles = insertTempFile(files, createTempFile(tether));
+      getNewFiles.then(function(files){
+        processFiles(settings, files);
+      });
+    } else {
+      processFiles(settings, files)
+    }
+  } else {
+    processFiles(settings, files)
+  }
+}
+
+function insertTempFile(fileArray, tempFile) {
+  var index = _.findIndex(fileArray, function(o) { return o.includes('tooltip.js') || o.includes('dropdown.js'); });
+  return new Promise(function(resolve, reject) {
+    tempFile.then(function (result) {
+      fileArray.splice(index, 0, result);
+      resolve(fileArray);
+    })
+  });
+}
+
+function createTempFile(promise) {
+  return new Promise(function(resolve, reject) {
+    promise.then(function(result) {
+      var tempFile = tmp.fileSync();
+      fs.appendFile(tempFile.name, result, (err) => {
+        if (err) reject(Error(err));
+        resolve(tempFile.name);
+      });
+    }, function(err) {
+      log(chalk.red(err)); // Error: "It broke"
+    });
+  });
+}
+
+function processFiles(settings, files) {
   var destinationPath = settings.destination + '/'
-  var destinationFile =  'bootstrap'
+  var destinationFile =  'bootstrap';
   concat(files).then(function(code) {
     writeFile(destinationPath, destinationFile + '.js', code);
     if (settings.minify) {
@@ -53,7 +102,7 @@ function defaultMode(settings) {
 }
 
 function writeFile(path, filename, data) {
-  fse.ensureDirSync(path);
+  fs.ensureDirSync(path);
   fs.writeFile(path + filename, data, (err) => {
     if (err) throw err;
   });
@@ -73,38 +122,63 @@ function gzipCode(data) {
 }
 
 function getBootstrap(settings) {
-  var bootstrapPath = settings.locations.bootstrap;
-  var popperPath = settings.locations.popperjs;
-  var tetherPath = settings.locations.tether;
-  if (bootstrapPath.substring(0,2) === './'){
-    bootstrapPath = (bootstrapPath).replace("./", "");
-  }
-  if (popperPath.substring(0,2) === './'){
-    popperPath = (popperPath).replace("./", "");
-  }
-  if (tetherPath.substring(0,2) === './'){
-    tetherPath = (tetherPath).replace("./", "");
-  }
-  var bootstrap = [bootstrapPath + '/util.js'];
+  var bootstrap = [settings['bootstrappath'] + '/util.js'];
   for (var prop in settings.files) {
     if (settings.files[prop]) {
-      var path = bootstrapPath + '/' + prop + '.js';
-      if (prop === 'tooltip') {
-        if ((settings.version).includes('4.0.0-beta')) {
-          bootstrap.push(popperPath + '/popper.js');
-        } else {
-          bootstrap.push(tetherPath + '/tether.js');
-        }
-      }
+      var path = settings['bootstrappath'] + '/' + prop + '.js';
       bootstrap.push(path);
     }
   }
-  return bootstrap
+  return _.uniq(bootstrap)
 }
 
 function withDefault(data, defaultValue){
   if (!data) data = defaultValue;
   return data
+}
+
+function getPopper(path) {
+  var version = getDependencyVersion(path, 'popper.js', '1.12.4');
+  var url = "https://cdn.jsdelivr.net/npm/popper.js@" + version + "/dist/popper.js";
+  return fetchFile(url)
+}
+
+function getTether(path) {
+  var version = getDependencyVersion(path, 'tether', '1.4.3');
+  var url = "https://cdnjs.cloudflare.com/ajax/libs/tether/" + version + "/js/tether.js";
+  return fetchFile(url)
+}
+
+function getDependencyVersion(path, dependency, defaultVersion) {
+  var nodePath = path;
+  if (path.includes('node_modules')) {
+    nodePath = path.substring(0, (path.indexOf('node_modules/bootstrap/') + 23));
+  }
+  var version;
+  try {
+    package = JSON.parse(fs.readFileSync(nodePath + '/package.json'));
+    if (package.devDependencies[dependency]){
+      version = (package.devDependencies[dependency]).replace('^', '');
+    } else if (package.dependencies[dependency]){
+      version = (package.dependencies[dependency]).replace('^', '');
+    }
+  } catch (err) {
+    version = defaultVersion;
+    log(err)
+  }
+  return version
+}
+
+function fetchFile(url) {
+  return new Promise(function(resolve, reject) {
+    fetchUrl(url, function(error, meta, body){
+      if (error) {
+        reject(Error("It broke"));
+      } else {
+        resolve(body.toString());
+      }
+    });
+  });
 }
 
 module.exports = defaultMode;

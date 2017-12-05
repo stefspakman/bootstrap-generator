@@ -1,21 +1,16 @@
 var bootstrap = require('../index.js');
 var settings = {
-  version: "4.0.0-beta.2",
-  locations: {
-    bootstrap: "./node_modules/bootstrap/js/dist/",
-    tether: "./node_modules/tether/dist/",
-    popperjs: "./node_modules/popper.js/dist/"
-  },
+  location:  "./node_modules/bootstrap/js/dist/",
   files: {
     alert: true,
-    button: true,
-    carousel: true,
-    collapse: true,
+    button: false,
+    carousel: false,
+    collapse: false,
     dropdown: true,
-    modal: true,
+    modal: false,
     popover: true,
-    scrollspy: true,
-    tab: true,
+    scrollspy: false,
+    tab: false,
     tooltip: true
   },
   minify: false,
