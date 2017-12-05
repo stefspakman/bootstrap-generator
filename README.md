@@ -1,6 +1,7 @@
 # Bootstrap Generator [![NPM version][npm-image]][npm-url]
 
 Generating custom Bootstrap JS files. Only use the parts you need. The generator makes sure you load the right parts.
+For Bootstrap 4+ either Tether or PopperJs are automatically downloaded and included in the resulting file. 
 
 ## Install
 
