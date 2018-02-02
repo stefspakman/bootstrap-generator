@@ -8,7 +8,8 @@ var
   UglifyJS = require("uglify-es"),
   zlib = require('zlib'),
   fetchUrl = require("fetch").fetchUrl,
-  tmp = require('tmp');
+  tmp = require('tmp'),
+  format = require("string-template");
 
 function defaultMode(settings) {
   settings = {
@@ -27,7 +28,11 @@ function defaultMode(settings) {
       tooltip: true
     }),
     minify: withDefault(settings.minify, true),
-    gzip: withDefault(settings.gzip, true)
+    gzip: withDefault(settings.gzip, true),
+    wrap: {
+      header: withDefault(settings.header, ""),
+      footer: withDefault(settings.footer, ""),
+    }
   }
   settings['bootstrappath'] = settings.location;
   if (settings['bootstrappath'].substring(0,2) === './'){
@@ -86,6 +91,11 @@ function processFiles(settings, files) {
   var destinationPath = settings.destination + '/'
   var destinationFile =  'bootstrap';
   concat(files).then(function(code) {
+
+    if (settings.wrap.header || settings.wrap.footer){
+      code = wrapCode(settings, code);
+    }
+
     writeFile(destinationPath, destinationFile + '.js', code);
     if (settings.minify) {
       code = minifyCode(code);
@@ -99,6 +109,15 @@ function processFiles(settings, files) {
     }
     log('Files generated');
   });
+}
+
+function wrapCode(settings, code) {
+  var output = format("{header}\n{code}\n{footer}", {
+    header: settings.wrap.header,
+    footer: settings.wrap.footer,
+    code: code
+  });
+  return output
 }
 
 function writeFile(path, filename, data) {
@@ -139,7 +158,7 @@ function withDefault(data, defaultValue){
 
 function getPopper(path) {
   var version = getDependencyVersion(path, 'popper.js', '1.12.4');
-  var url = "https://cdn.jsdelivr.net/npm/popper.js@" + version + "/dist/popper.js";
+  var url = "https://cdn.jsdelivr.net/npm/popper.js@" + version;
   return fetchFile(url)
 }
 

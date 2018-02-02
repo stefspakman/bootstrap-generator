@@ -15,6 +15,7 @@
     "fetch": "^1.1.0",
     "fs-extra": "^4.0.2",
     "lodash": "^4.17.4",
+    "string-template": "^1.0.0",
     "tmp": "0.0.33",
     "uglify-es": "^3.2.0",
     "zlib": "^1.0.5"
